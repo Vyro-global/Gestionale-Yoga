@@ -1,0 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Poppins", "Montserrat", sans-serif;
+  --font-mono: "Montserrat", "Poppins", sans-serif;
+}
+
+body {
+  font-family: "Poppins", "Montserrat", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Let's redefine monospace code tags or specific classes just in case */
+.font-mono {
+  font-family: "Montserrat", "Poppins", sans-serif !important;
+}
+
+code, kbd, samp, pre {
+  font-family: "Poppins", "Montserrat", sans-serif !important;
+}

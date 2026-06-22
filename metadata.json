@@ -1,0 +1,6 @@
+{
+  "name": "FluxCRM - Gestione Palestra",
+  "description": "Gestionale completo ed elegante per palestre di Yoga, Pilates e Danza con assistente AI e gestione abbonamenti, presenze, lezioni e fatturazione PDF.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
