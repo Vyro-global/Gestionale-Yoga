@@ -54,19 +54,24 @@ async function verifyWithServer(
 ): Promise<{ staff: Staff; subscriptionActive: boolean } | null> {
   for (let i = 0; i < maxRetries; i++) {
     try {
+      console.log(`[App] Verifica sessione (tentativo ${i + 1}/${maxRetries})...`);
       const res = await fetch('/api/auth/me', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (res.ok) {
         const data = await res.json();
+        console.log('[App] Sessione verificata:', data);
         return { staff: data.staff, subscriptionActive: data.subscriptionActive };
       }
-      // Se 403 significa che il server non riconosce lo staff
+      console.warn(`[App] /api/auth/me ha risposto con status ${res.status}`);
+      const errBody = await res.text();
+      console.warn(`[App] Body risposta:`, errBody);
       if (res.status === 403) {
         return null;
       }
+      // Altri errori (500, 401, etc.) — riprova dopo un delay
     } catch (e) {
-      console.error('Errore verifica sessione:', e);
+      console.error(`[App] Errore fetch /api/auth/me (tentativo ${i + 1}):`, e);
     }
     if (i < maxRetries - 1) {
       await new Promise(r => setTimeout(r, 2000));
@@ -96,8 +101,17 @@ export default function App() {
     let cancelled = false;
 
     const bootstrap = async () => {
-      // 1. Check for existing Supabase session
+      // 1. Clean OAuth hash from URL immediately (Supabase may have
+      //    already processed it, but we always clean the address bar).
+      if (window.location.hash && window.location.hash.includes('access_token')) {
+        console.log('[App] Rilevato access_token nell\'hash, attendo elaborazione...');
+        // Give Supabase a tick to process the hash
+        await new Promise(r => setTimeout(r, 100));
+      }
+
+      // 2. Check for existing Supabase session
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('[App] getSession:', session ? `utente=${session.user.email}` : 'nessuna sessione');
 
       if (session) {
         globalAuthToken = session.access_token;
@@ -105,7 +119,7 @@ export default function App() {
 
         const urlParams = new URLSearchParams(window.location.search);
         const paymentStatus = urlParams.get('payment');
-        const maxRetries = paymentStatus === 'success' ? 5 : 1;
+        const maxRetries = paymentStatus === 'success' ? 5 : 2;
 
         const result = await verifyWithServer(session.access_token, maxRetries);
 
@@ -114,19 +128,20 @@ export default function App() {
             setStaff(result.staff);
             setAppState(result.subscriptionActive ? 'crm' : 'payment');
           } else {
-            // Server didn't recognise the user → force login
+            console.warn('[App] Verifica server fallita, logout...');
             await supabase.auth.signOut();
             globalAuthToken = null;
             setToken(null);
             setAppState('login');
           }
-          // Clean URL params
-          if (paymentStatus) {
-            window.history.replaceState({}, '', '/');
-          }
         }
       } else {
         if (!cancelled) setAppState('login');
+      }
+
+      // 3. Always clean URL
+      if ((window.location.hash && window.location.hash.includes('access_token')) || window.location.search.includes('payment')) {
+        window.history.replaceState({}, '', '/');
       }
     };
 
@@ -134,34 +149,33 @@ export default function App() {
 
     // 2. Listen for auth changes (Google OAuth return, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        console.log('[App] onAuthStateChange:', event, session?.user?.email || 'logout');
         if (session) {
           globalAuthToken = session.access_token;
           setToken(session.access_token);
 
-          const urlParams = new URLSearchParams(window.location.search);
-          const paymentStatus = urlParams.get('payment');
-          const maxRetries = paymentStatus === 'success' ? 5 : 1;
-
-          const result = await verifyWithServer(session.access_token, maxRetries);
+          const result = await verifyWithServer(session.access_token, 2);
 
           if (result) {
             setStaff(result.staff);
             setAppState(result.subscriptionActive ? 'crm' : 'payment');
           } else {
+            console.warn('[App] onAuthStateChange: verifica server fallita, logout...');
             await supabase.auth.signOut();
             globalAuthToken = null;
             setToken(null);
             setAppState('login');
-          }
-          if (paymentStatus) {
-            window.history.replaceState({}, '', '/');
           }
         } else {
           globalAuthToken = null;
           setToken(null);
           setStaff(null);
           setAppState('login');
+        }
+        // Clean URL after auth events
+        if (window.location.hash && window.location.hash.includes('access_token')) {
+          window.history.replaceState({}, '', '/');
         }
       },
     );
