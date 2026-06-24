@@ -46,7 +46,7 @@ export interface Presenza {
 export interface Fattura {
   id: string;
   cliente_id: string;
-  numero_fattura: string; 
+  numero_fattura: string;
   descrizione: string;
   importo: number;
   data_emissione: string;
@@ -96,6 +96,17 @@ export interface PipelineColumn {
   ordine: number;
 }
 
+/** Stripe subscription record stored server-side in db.json */
+export interface StripeSubscription {
+  user_id: string;
+  email: string;
+  stripe_customer_id: string;
+  stripe_subscription_id: string;
+  status: 'active' | 'canceled' | 'past_due' | 'unpaid' | 'incomplete' | 'incomplete_expired' | 'trialing';
+  current_period_end: string;
+  created_at: string;
+}
+
 export interface GestionaleData {
   clienti: Cliente[];
   abbonamenti: Abbonamento[];
@@ -107,4 +118,5 @@ export interface GestionaleData {
   impostazioni: Impostazioni;
   pipeline_leads?: PipelineLead[];
   pipeline_colonne?: PipelineColumn[];
+  subscriptions?: Record<string, StripeSubscription>;
 }

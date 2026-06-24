@@ -5,7 +5,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { Staff, Cliente, Abbonamento, Fattura } from './types.js';
+import { supabase } from './lib/supabase.js';
 import Login from './components/Login.js';
+import Pagamento from './components/Pagamento.js';
 import DashboardView from './components/DashboardView.js';
 import ClientiView from './components/ClientiView.js';
 import AbbonamentiView from './components/AbbonamentiView.js';
@@ -15,35 +17,191 @@ import FattureView from './components/FattureView.js';
 import AIChatView from './components/AIChatView.js';
 import ImpostazioniView from './components/ImpostazioniView.js';
 
-import { 
-  Building2, Users, Calendar, Clock, DollarSign, Bot, Settings, LogOut, 
-  Sparkles, CheckSquare, User, Menu, X, Landmark
+import {
+  Building2, Users, Calendar, Clock, DollarSign, Bot, Settings, LogOut,
+  Sparkles, CheckSquare, Menu, X, Landmark, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+// ---------------------------------------------------------------------------
+// Global auth token — monkey-patched into every fetch('/api/*') call
+// so existing components work without changes.
+// ---------------------------------------------------------------------------
+let globalAuthToken: string | null = null;
+
+const originalFetch = window.fetch.bind(window);
+window.fetch = function (input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+
+  if (url.startsWith('/api/') && globalAuthToken) {
+    init = init || {};
+    const headers = new Headers(init.headers);
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${globalAuthToken}`);
+    }
+    init.headers = headers;
+  }
+
+  return originalFetch(input, init);
+};
+
+// ---------------------------------------------------------------------------
+// Helper: call /api/auth/me with retry (useful after Stripe redirect)
+// ---------------------------------------------------------------------------
+async function verifyWithServer(
+  accessToken: string,
+  maxRetries: number = 1,
+): Promise<{ staff: Staff; subscriptionActive: boolean } | null> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { staff: data.staff, subscriptionActive: data.subscriptionActive };
+      }
+      // Se 403 significa che il server non riconosce lo staff
+      if (res.status === 403) {
+        return null;
+      }
+    } catch (e) {
+      console.error('Errore verifica sessione:', e);
+    }
+    if (i < maxRetries - 1) {
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// App
+// ---------------------------------------------------------------------------
 export default function App() {
+  const [appState, setAppState] = useState<'loading' | 'login' | 'payment' | 'crm'>('loading');
   const [staff, setStaff] = useState<Staff | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
-  
-  // Real-time notification counters
   const [alertUnpaidCount, setAlertUnpaidCount] = useState(0);
   const [alertExpiringCount, setAlertExpiringCount] = useState(0);
-
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [impostazioni, setImpostazioni] = useState<any>(null);
 
-  // Check if staff session is saved in local storage
+  // -----------------------------------------------------------------------
+  // Bootstrap: check Supabase session & verify with our server
+  // -----------------------------------------------------------------------
   useEffect(() => {
-    const saved = localStorage.getItem('fluxcrm_session');
-    if (saved) {
-      try {
-        setStaff(JSON.parse(saved));
-      } catch (e) {
-        localStorage.removeItem('fluxcrm_session');
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      // 1. Check for existing Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (session) {
+        globalAuthToken = session.access_token;
+        if (!cancelled) setToken(session.access_token);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const paymentStatus = urlParams.get('payment');
+        const maxRetries = paymentStatus === 'success' ? 5 : 1;
+
+        const result = await verifyWithServer(session.access_token, maxRetries);
+
+        if (!cancelled) {
+          if (result) {
+            setStaff(result.staff);
+            setAppState(result.subscriptionActive ? 'crm' : 'payment');
+          } else {
+            // Server didn't recognise the user → force login
+            await supabase.auth.signOut();
+            globalAuthToken = null;
+            setToken(null);
+            setAppState('login');
+          }
+          // Clean URL params
+          if (paymentStatus) {
+            window.history.replaceState({}, '', '/');
+          }
+        }
+      } else {
+        if (!cancelled) setAppState('login');
       }
-    }
+    };
+
+    bootstrap();
+
+    // 2. Listen for auth changes (Google OAuth return, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        if (session) {
+          globalAuthToken = session.access_token;
+          setToken(session.access_token);
+
+          const urlParams = new URLSearchParams(window.location.search);
+          const paymentStatus = urlParams.get('payment');
+          const maxRetries = paymentStatus === 'success' ? 5 : 1;
+
+          const result = await verifyWithServer(session.access_token, maxRetries);
+
+          if (result) {
+            setStaff(result.staff);
+            setAppState(result.subscriptionActive ? 'crm' : 'payment');
+          } else {
+            await supabase.auth.signOut();
+            globalAuthToken = null;
+            setToken(null);
+            setAppState('login');
+          }
+          if (paymentStatus) {
+            window.history.replaceState({}, '', '/');
+          }
+        } else {
+          globalAuthToken = null;
+          setToken(null);
+          setStaff(null);
+          setAppState('login');
+        }
+      },
+    );
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
+  // -----------------------------------------------------------------------
+  // Callbacks
+  // -----------------------------------------------------------------------
+  const handleLoginSuccess = (loggedInStaff: Staff, subscriptionActive: boolean) => {
+    setStaff(loggedInStaff);
+    // Token is already stored globally by the bootstrap / onAuthStateChange
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        globalAuthToken = session.access_token;
+        setToken(session.access_token);
+      }
+    });
+    setAppState(subscriptionActive ? 'crm' : 'payment');
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    globalAuthToken = null;
+    setStaff(null);
+    setToken(null);
+    setAppState('login');
+  };
+
+  const handleSubscriptionActivated = () => {
+    setAppState('crm');
+  };
+
+  // -----------------------------------------------------------------------
+  // Data fetching (only when inside CRM)
+  // -----------------------------------------------------------------------
   const fetchImpostazioni = async () => {
     try {
       const res = await fetch('/api/impostazioni');
@@ -52,24 +210,23 @@ export default function App() {
         setImpostazioni(data);
       }
     } catch (e) {
-      console.error("Errore fetch impostazioni", e);
+      console.error('Errore fetch impostazioni', e);
     }
   };
 
-  // Sync warning alert badges
   const syncAlertBadges = async () => {
     try {
       const getJSON = (url: string) => fetch(url).then(r => r.json());
       const [abb, fat] = await Promise.all([
         getJSON('/api/abbonamenti'),
-        getJSON('/api/fatture')
+        getJSON('/api/fatture'),
       ]);
 
-      // Calculate unpaid invoices
-      const unpaid = fat.filter((f: Fattura) => f.stato_pagamento === 'da pagare' || f.stato_pagamento === 'scaduto').length;
+      const unpaid = fat.filter(
+        (f: Fattura) => f.stato_pagamento === 'da pagare' || f.stato_pagamento === 'scaduto',
+      ).length;
       setAlertUnpaidCount(unpaid);
 
-      // Calculate expiring abbonamenti within 7 days
       const todayVal = new Date().getTime();
       const sevenDaysVal = todayVal + 7 * 24 * 60 * 60 * 1000;
       const expiring = abb.filter((a: Abbonamento) => {
@@ -77,39 +234,58 @@ export default function App() {
         return a.stato === 'attivo' && endVal >= todayVal && endVal <= sevenDaysVal;
       }).length;
       setAlertExpiringCount(expiring);
-
     } catch (e) {
-      console.error("Errore sincro badge", e);
+      console.error('Errore sincro badge', e);
     }
   };
 
   useEffect(() => {
-    if (staff) {
+    if (appState === 'crm') {
       syncAlertBadges();
       fetchImpostazioni();
     }
-  }, [staff]);
-
-  const handleLoggedSuccess = (loggedInStaff: Staff) => {
-    setStaff(loggedInStaff);
-    localStorage.setItem('fluxcrm_session', JSON.stringify(loggedInStaff));
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('fluxcrm_session');
-    setStaff(null);
-  };
+  }, [appState]);
 
   const handleSettingsUpdated = () => {
     syncAlertBadges();
     fetchImpostazioni();
   };
 
-  if (!staff) {
-    return <Login onLoginSuccess={handleLoggedSuccess} />;
+  // -----------------------------------------------------------------------
+  // Render: loading spinner
+  // -----------------------------------------------------------------------
+  if (appState === 'loading') {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 text-[#113f3d] animate-spin" />
+        <p className="text-slate-500 text-sm font-mono">Verifica sessione in corso...</p>
+      </div>
+    );
   }
 
-  // Dictionary of dynamic navigation tabs
+  // -----------------------------------------------------------------------
+  // Render: login screen
+  // -----------------------------------------------------------------------
+  if (appState === 'login') {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: payment screen (logged in, no subscription)
+  // -----------------------------------------------------------------------
+  if (appState === 'payment') {
+    return (
+      <Pagamento
+        token={token || ''}
+        onSubscriptionActivated={handleSubscriptionActivated}
+      />
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: CRM (logged in + active subscription)
+  // -----------------------------------------------------------------------
+
   const navigationItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <Landmark className="w-4 h-4" /> },
     { id: 'clienti', label: 'Anagrafiche Clienti', icon: <Users className="w-4 h-4" /> },
@@ -118,16 +294,15 @@ export default function App() {
     { id: 'presenze', label: 'Registro Presenze', icon: <Clock className="w-4 h-4" /> },
     { id: 'fatture', label: 'Ricevute & Fatture', icon: <DollarSign className="w-4 h-4" />, badge: alertUnpaidCount },
     { id: 'ai', label: 'Flux AI Copilot', icon: <Bot className="w-4 h-4" />, highlight: true },
-    { id: 'impostazioni', label: 'Impostazioni', icon: <Settings className="w-4 h-4" /> }
+    { id: 'impostazioni', label: 'Impostazioni', icon: <Settings className="w-4 h-4" /> },
   ];
 
   return (
     <div className="min-h-screen md:h-screen bg-slate-50/50 text-slate-800 flex flex-col md:flex-row antialiased md:overflow-hidden overflow-x-hidden">
-      
-      {/* 1. SIDEBAR NAVIGATION WRAPPER FOR DESKTOP */}
+
+      {/* SIDEBAR */}
       <aside className="w-72 bg-[#113f3d] text-white shrink-0 hidden md:flex flex-col justify-between p-6 shadow-2xl relative h-full overflow-y-auto pb-8">
         <div className="space-y-8">
-          {/* Brand Identity / Flowing Typography Header */}
           <div className="flex items-center gap-3">
             {impostazioni?.logo_url ? (
               <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-lg shrink-0 overflow-hidden p-1">
@@ -148,7 +323,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Tab Button list */}
           <nav className="space-y-1.5">
             {navigationItems.map((item) => {
               const isActive = currentTab === item.id;
@@ -157,19 +331,17 @@ export default function App() {
                   key={item.id}
                   onClick={() => setCurrentTab(item.id)}
                   className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold font-sans tracking-wide transition-all duration-200 cursor-pointer ${
-                    isActive 
-                      ? 'bg-white/10 text-white shadow-inner border-l-4 border-l-[#84e062]' 
+                    isActive
+                      ? 'bg-white/10 text-white shadow-inner border-l-4 border-l-[#84e062]'
                       : item.highlight
-                      ? 'text-[#84e062] hover:bg-white/5'
-                      : 'text-teal-100/70 hover:bg-white/5 hover:text-white'
+                        ? 'text-[#84e062] hover:bg-white/5'
+                        : 'text-teal-100/70 hover:bg-white/5 hover:text-white'
                   }`}
                 >
                   <div className="flex items-center gap-3">
                     {item.icon}
                     <span>{item.label}</span>
                   </div>
-
-                  {/* Warning badges display */}
                   {item.badge !== undefined && item.badge > 0 && (
                     <span className="bg-rose-500 text-white font-mono font-bold text-[9px] h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center animate-pulse">
                       {item.badge}
@@ -181,19 +353,18 @@ export default function App() {
           </nav>
         </div>
 
-        {/* LOGGED STAFF IN BRIEF */}
         <div className="pt-6 border-t border-teal-850 space-y-4">
           <div className="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/5">
             <div className="w-9 h-9 bg-[#84e062]/20 text-[#84e062] font-extrabold font-mono text-xs rounded-xl flex items-center justify-center shrink-0">
-              {staff.nome ? staff.nome.split(/\s+/).map((n: string) => n.charAt(0)).slice(0, 2).join('').toUpperCase() : 'U'}
+              {staff?.nome
+                ? staff.nome.split(/\s+/).map((n: string) => n.charAt(0)).slice(0, 2).join('').toUpperCase()
+                : 'U'}
             </div>
-            
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-white truncate">{staff.nome || 'Staff'}</p>
-              <p className="text-[10px] font-mono text-teal-300 tracking-wider truncate block font-bold mt-0.5 uppercase">{staff.ruolo}</p>
+              <p className="text-xs font-bold text-white truncate">{staff?.nome || 'Staff'}</p>
+              <p className="text-[10px] font-mono text-teal-300 tracking-wider truncate block font-bold mt-0.5 uppercase">{staff?.ruolo}</p>
             </div>
           </div>
-
           <button
             onClick={handleLogout}
             className="w-full py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-350 hover:text-rose-200 rounded-xl text-[10px] font-mono font-bold tracking-wider uppercase transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
@@ -203,7 +374,7 @@ export default function App() {
         </div>
       </aside>
 
-      {/* 2. MOBILE RESPONSIVE NAV BAR HEADER */}
+      {/* MOBILE HEADER */}
       <header className="md:hidden bg-[#113f3d] text-white p-4 flex items-center justify-between border-b border-teal-850 shrink-0 sticky top-0 z-40">
         <div className="flex items-center gap-2">
           {impostazioni?.logo_url ? (
@@ -219,8 +390,7 @@ export default function App() {
             {impostazioni?.logo || 'FluxGestionale'}
           </span>
         </div>
-
-        <button 
+        <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className="p-1 px-2.5 bg-white/5 rounded-lg border border-white/10"
         >
@@ -228,7 +398,7 @@ export default function App() {
         </button>
       </header>
 
-      {/* Mobile menu drop-down Drawer */}
+      {/* MOBILE MENU */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
@@ -246,8 +416,8 @@ export default function App() {
                     setMobileMenuOpen(false);
                   }}
                   className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-bold font-sans cursor-pointer ${
-                    currentTab === item.id 
-                      ? 'bg-white/10 text-white shadow-inner border-l-4 border-l-[#84e062]' 
+                    currentTab === item.id
+                      ? 'bg-white/10 text-white shadow-inner border-l-4 border-l-[#84e062]'
                       : 'text-teal-100/70 hover:bg-white/5'
                   }`}
                 >
@@ -255,7 +425,6 @@ export default function App() {
                     {item.icon}
                     <span>{item.label}</span>
                   </div>
-
                   {item.badge !== undefined && item.badge > 0 && (
                     <span className="bg-rose-500 text-white font-mono font-bold text-[9px] h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center">
                       {item.badge}
@@ -264,16 +433,15 @@ export default function App() {
                 </button>
               ))}
             </nav>
-
             <div className="pt-4 border-t border-teal-850 flex justify-between items-center">
-              <span className="text-[10px] text-teal-300 font-mono">Simulato: {staff.nome}</span>
+              <span className="text-[10px] text-teal-300 font-mono">{staff?.nome}</span>
               <button onClick={handleLogout} className="text-[10px] font-mono text-rose-350 uppercase">Disconnetti</button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* 3. MAIN WORKSPACE VIEW ROUTER */}
+      {/* MAIN WORKSPACE */}
       <main className="flex-1 p-6 md:p-10 overflow-y-auto max-w-7xl mx-auto w-full">
         <AnimatePresence mode="wait">
           <motion.div
@@ -294,7 +462,6 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
-
     </div>
   );
 }

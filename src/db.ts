@@ -5,7 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { GestionaleData, Cliente, Abbonamento, Lezione, Presenza, Fattura, Staff, Promemoria, Impostazioni, PipelineLead, PipelineColumn } from './types.js';
+import { GestionaleData, Cliente, Abbonamento, Lezione, Presenza, Fattura, Staff, Promemoria, Impostazioni, PipelineLead, PipelineColumn, StripeSubscription } from './types.js';
 
 const DB_FILE = path.join(process.cwd(), 'db.json');
 
@@ -611,5 +611,44 @@ export class DBService {
     if (!db.pipeline_leads) db.pipeline_leads = [];
     db.pipeline_leads = db.pipeline_leads.filter(l => l.id !== id);
     DBService.writeDB(db);
+  }
+
+  // -----------------------------------------------------------------------
+  // Stripe Subscriptions (mapped by Supabase user_id)
+  // -----------------------------------------------------------------------
+  public static getSubscription(userId: string): StripeSubscription | null {
+    const db = DBService.readDB();
+    if (!db.subscriptions) return null;
+    return db.subscriptions[userId] || null;
+  }
+
+  public static isSubscriptionActive(userId: string): boolean {
+    const sub = DBService.getSubscription(userId);
+    if (!sub) return false;
+    return sub.status === 'active' || sub.status === 'trialing';
+  }
+
+  public static saveSubscription(userId: string, sub: StripeSubscription): void {
+    const db = DBService.readDB();
+    if (!db.subscriptions) db.subscriptions = {};
+    db.subscriptions[userId] = sub;
+    DBService.writeDB(db);
+  }
+
+  /** Auto-create or retrieve a staff record linked to a Supabase user email */
+  public static findOrCreateStaff(email: string, nome?: string): Staff {
+    const db = DBService.readDB();
+    const existing = db.staff.find(s => s.email.toLowerCase().trim() === email.toLowerCase().trim());
+    if (existing) return existing;
+
+    const newStaff: Staff = {
+      id: 'st_' + generateId(),
+      email: email.toLowerCase().trim(),
+      nome: nome || email.split('@')[0],
+      ruolo: 'staff',
+    };
+    db.staff.push(newStaff);
+    DBService.writeDB(db);
+    return newStaff;
   }
 }

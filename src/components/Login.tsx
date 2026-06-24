@@ -3,68 +3,95 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { supabase } from '../lib/supabase.js';
 import { Staff } from '../types.js';
-import { LogIn, Key, Compass, CheckCircle2, AlertCircle } from 'lucide-react';
+import { LogIn, Mail, Key, Compass, AlertCircle, Chrome } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface LoginProps {
-  onLoginSuccess: (user: Staff) => void;
+  onLoginSuccess: (user: Staff, subscriptionActive: boolean) => void;
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
-  useEffect(() => {
-    const loadStaff = async () => {
-      try {
-        const response = await fetch('/api/staff');
-        if (response.ok) {
-          const data = await response.json();
-          // Show only staff added in "membri abilitati" who are NOT admin
-          const filtered = data.filter((st: Staff) => st.ruolo !== 'admin');
-          setStaffList(filtered);
-        }
-      } catch (err) {
-        console.error("Errore caricamento staff", err);
-      }
-    };
-    loadStaff();
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  /** Email + Password login */
+  const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (!email || !password) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim() }),
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Errore durante l\'autenticazione');
-      }
+      if (authError) throw authError;
+      if (!data.user) throw new Error('Login fallito: nessun utente restituito.');
 
-      onLoginSuccess(data.user);
+      // Get staff info + subscription status from server
+      await finalizeLogin();
     } catch (err: any) {
-      setError(err.message || 'Email non registrata nel database dello staff.');
+      setError(err.message || 'Credenziali non valide. Riprova.');
     } finally {
       setLoading(false);
     }
   };
 
+  /** Google OAuth login */
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    setError(null);
+
+    try {
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+
+      if (oauthError) throw oauthError;
+      // Page will redirect to Google — no further action here
+    } catch (err: any) {
+      setError(err.message || 'Errore durante l\'accesso con Google.');
+      setGoogleLoading(false);
+    }
+  };
+
+  /** After Supabase auth, verify staff + subscription on the server */
+  const finalizeLogin = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Sessione non trovata dopo il login.');
+
+    const res = await fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Accesso negato dal server.');
+    }
+
+    const { staff, subscriptionActive } = await res.json();
+    onLoginSuccess(staff, subscriptionActive);
+  };
+
   return (
     <div id="login-screen" className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -77,7 +104,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           <div className="absolute bottom-0 left-0 w-32 h-32 bg-teal-500 rounded-full filter blur-3xl opacity-10 -ml-10 -mb-10" />
 
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-950/40 border border-teal-800 text-[#84e062] text-xs font-mono mb-4">
-            <Compass className="w-3.5 h-3.5 animate-spin-slow" /> PORTAL DISPOSITIVI STAFF
+            <Compass className="w-3.5 h-3.5" /> PORTALE RISERVATO
           </div>
 
           <div className="flex items-center justify-center gap-3">
@@ -91,13 +118,25 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         {/* Form area */}
         <div className="p-8">
           <p className="text-slate-600 text-sm text-center mb-6">
-            Questo portale è riservato esclusivamente allo staff interno per la gestione degli atleti.
+            Accedi con le tue credenziali per gestire il centro.
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-2 text-rose-600 text-xs mb-4"
+            >
+              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>{error}</span>
+            </motion.div>
+          )}
+
+          {/* Email + Password Form */}
+          <form onSubmit={handleEmailLogin} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Indirizzo Email Staff
+                Email
               </label>
               <div className="relative">
                 <input
@@ -108,55 +147,64 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                   required
                   className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#113f3d] focus:bg-white text-slate-800 text-sm font-medium transition-all"
                 />
-                <LogIn className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
               </div>
             </div>
 
-            {error && (
-              <motion.div 
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="p-3 bg-rose-50 border border-rose-100 rounded-xl flex items-start gap-2 text-rose-600 text-xs"
-              >
-                <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                <span>{error}</span>
-              </motion.div>
-            )}
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#113f3d] focus:bg-white text-slate-800 text-sm font-medium transition-all"
+                />
+                <Key className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+              </div>
+            </div>
 
             <button
               type="submit"
-              disabled={loading || !email}
+              disabled={loading || !email || !password}
               className="w-full py-3 bg-[#113f3d] hover:bg-teal-900 text-white rounded-2xl font-semibold text-sm shadow-lg shadow-[#113f3d]/15 hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              {loading ? 'Verifica credenziali in corso...' : 'Accedi al gestionale'}
+              {loading ? (
+                'Verifica in corso...'
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4" /> Accedi
+                </>
+              )}
             </button>
           </form>
 
-          {/* Quick Access Area for Demo */}
-          {staffList.length > 0 && (
-            <div className="mt-8 pt-6 border-t border-slate-100">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                <Key className="w-3.5 h-3.5" /> ACCESSO RAPIDO DEMO
-              </div>
-              
-              <div className="space-y-2">
-                {staffList.map((st) => (
-                  <button
-                    key={st.email}
-                    type="button"
-                    onClick={() => setEmail(st.email)}
-                    className="w-full p-3 text-left bg-slate-50 hover:bg-teal-50/50 border border-slate-100 hover:border-teal-100 rounded-xl text-xs font-medium text-slate-700 flex items-center justify-between transition-all group cursor-pointer"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-950 block">{st.nome}</span>
-                      <span className="text-slate-500 font-mono text-[10px]">{st.email}</span>
-                    </div>
-                    <CheckCircle2 className="w-4 h-4 text-[#84e062] opacity-0 group-hover:opacity-100 transition-all shrink-0" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-6">
+            <div className="flex-1 h-px bg-slate-200" />
+            <span className="text-xs font-medium text-slate-400 uppercase">oppure</span>
+            <div className="flex-1 h-px bg-slate-200" />
+          </div>
+
+          {/* Google OAuth Button */}
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={googleLoading}
+            className="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-2xl font-semibold text-sm shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          >
+            {googleLoading ? (
+              'Reindirizzamento a Google...'
+            ) : (
+              <>
+                <Chrome className="w-4 h-4" /> Accedi con Google
+              </>
+            )}
+          </button>
         </div>
       </motion.div>
 

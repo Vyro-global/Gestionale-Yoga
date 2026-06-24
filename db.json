@@ -1,0 +1,269 @@
+{
+  "clienti": [
+    {
+      "id": "cli_1",
+      "nome": "Giulia",
+      "cognome": "Bianchi",
+      "email": "giulia.bianchi@gmail.com",
+      "telefono": "+39 333 1234567",
+      "data_nascita": "1994-05-12",
+      "note": "Soffre di un leggero mal di schiena a livello lombare, fare attenzione nel Pilates.",
+      "creato_il": "2026-01-10T10:00:00Z"
+    },
+    {
+      "id": "cli_2",
+      "nome": "Mario",
+      "cognome": "Rossi",
+      "email": "mario.rossi@yahoo.it",
+      "telefono": "+39 347 9876543",
+      "data_nascita": "1988-09-22",
+      "note": "Preferisce Hatha Yoga energetico. Sempre molto puntuale.",
+      "creato_il": "2026-02-15T11:30:00Z"
+    },
+    {
+      "id": "cli_3",
+      "nome": "Sandra",
+      "cognome": "Neri",
+      "email": "sandra.neri@icloud.com",
+      "telefono": "+39 328 1122334",
+      "data_nascita": "1992-12-05",
+      "note": "Pratica danza da molti anni, molto flessibile.",
+      "creato_il": "2026-03-01T09:15:00Z"
+    },
+    {
+      "id": "cli_4",
+      "nome": "Roberto",
+      "cognome": "Verdi",
+      "email": "roberto.verdi@gmail.com",
+      "telefono": "+39 349 5554433",
+      "data_nascita": "1980-04-18",
+      "note": "Iniziato Yoga per rilassamento aziendale.",
+      "creato_il": "2026-04-20T17:45:00Z"
+    },
+    {
+      "id": "cli_5",
+      "nome": "Sofia",
+      "cognome": "Moretti",
+      "email": "sofia.moretti@virgilio.it",
+      "telefono": "+39 335 8899001",
+      "data_nascita": "1995-07-30",
+      "note": "Cliente inattiva da contattare. Non risponde all'ultima email di feedback.",
+      "creato_il": "2026-02-28T14:20:00Z"
+    }
+  ],
+  "abbonamenti": [
+    {
+      "id": "abb_1",
+      "cliente_id": "cli_1",
+      "tipo": "Annuale",
+      "data_inizio": "2026-01-15",
+      "data_fine": "2027-01-14",
+      "stato": "attivo",
+      "importo": 750,
+      "creato_il": "2026-01-15T10:15:00Z"
+    },
+    {
+      "id": "abb_2",
+      "cliente_id": "cli_2",
+      "tipo": "Mensile",
+      "data_inizio": "2026-05-15",
+      "data_fine": "2026-06-15",
+      "stato": "scaduto",
+      "importo": 80,
+      "creato_il": "2026-05-15T12:00:00Z"
+    },
+    {
+      "id": "abb_3",
+      "cliente_id": "cli_3",
+      "tipo": "Trimestrale",
+      "data_inizio": "2026-03-22",
+      "data_fine": "2026-06-22",
+      "stato": "attivo",
+      "importo": 220,
+      "creato_il": "2026-03-22T09:30:00Z"
+    },
+    {
+      "id": "abb_4",
+      "cliente_id": "cli_4",
+      "tipo": "Mensile",
+      "data_inizio": "2026-06-01",
+      "data_fine": "2026-07-01",
+      "stato": "attivo",
+      "importo": 80,
+      "creato_il": "2026-06-01T18:00:00Z"
+    }
+  ],
+  "lezioni": [
+    {
+      "id": "lez_1",
+      "titolo": "Yoga Vinyasa Flow",
+      "istruttore": "Lara Croft",
+      "giorno_settimana": "Lunedì",
+      "orario": "18:00",
+      "posti_disponibili": 15,
+      "creato_il": "2026-01-01T08:00:00Z"
+    },
+    {
+      "id": "lez_2",
+      "titolo": "Pilates Avanzato",
+      "istruttore": "Marco Polo",
+      "giorno_settimana": "Martedì",
+      "orario": "19:30",
+      "posti_disponibili": 12,
+      "creato_il": "2026-01-01T08:00:00Z"
+    },
+    {
+      "id": "lez_3",
+      "titolo": "Danza Contemporanea",
+      "istruttore": "Elena Sofia",
+      "giorno_settimana": "Mercoledì",
+      "orario": "18:30",
+      "posti_disponibili": 18,
+      "creato_il": "2026-01-01T08:00:00Z"
+    },
+    {
+      "id": "lez_4",
+      "titolo": "Hatha Yoga Dolce",
+      "istruttore": "Lara Croft",
+      "giorno_settimana": "Giovedì",
+      "orario": "17:30",
+      "posti_disponibili": 15,
+      "creato_il": "2026-01-01T08:00:00Z"
+    },
+    {
+      "id": "lez_5",
+      "titolo": "Power Pilates",
+      "istruttore": "Marco Polo",
+      "giorno_settimana": "Venerdì",
+      "orario": "13:00",
+      "posti_disponibili": 10,
+      "creato_il": "2026-01-01T08:00:00Z"
+    }
+  ],
+  "presenze": [
+    {
+      "id": "pre_1",
+      "cliente_id": "cli_1",
+      "lezione_id": "lez_1",
+      "data_presenza": "2026-06-15"
+    },
+    {
+      "id": "pre_2",
+      "cliente_id": "cli_1",
+      "lezione_id": "lez_4",
+      "data_presenza": "2026-06-18"
+    },
+    {
+      "id": "pre_3",
+      "cliente_id": "cli_4",
+      "lezione_id": "lez_1",
+      "data_presenza": "2026-06-15"
+    },
+    {
+      "id": "pre_4",
+      "cliente_id": "cli_3",
+      "lezione_id": "lez_3",
+      "data_presenza": "2026-06-17"
+    },
+    {
+      "id": "pre_5",
+      "cliente_id": "cli_5",
+      "lezione_id": "lez_2",
+      "data_presenza": "2026-05-12"
+    }
+  ],
+  "fatture": [
+    {
+      "id": "fat_1",
+      "cliente_id": "cli_1",
+      "numero_fattura": "0001/2026",
+      "descrizione": "Abbonamento annuale yoga & pilates",
+      "importo": 750,
+      "data_emissione": "2026-01-15",
+      "data_scadenza": "2026-01-30",
+      "stato_pagamento": "pagato",
+      "file_url": "",
+      "creato_il": "2026-01-15T10:30:00Z"
+    },
+    {
+      "id": "fat_2",
+      "cliente_id": "cli_4",
+      "numero_fattura": "0002/2026",
+      "descrizione": "Mese di Giugno Yoga",
+      "importo": 80,
+      "data_emissione": "2026-06-01",
+      "data_scadenza": "2026-06-15",
+      "stato_pagamento": "pagato",
+      "file_url": "",
+      "creato_il": "2026-06-01T18:10:00Z"
+    },
+    {
+      "id": "fat_3",
+      "cliente_id": "cli_3",
+      "numero_fattura": "0003/2026",
+      "descrizione": "Integrazione Trimestrale Pilates",
+      "importo": 220,
+      "data_emissione": "2026-03-22",
+      "data_scadenza": "2026-04-05",
+      "stato_pagamento": "pagato",
+      "file_url": "",
+      "creato_il": "2026-03-22T09:40:00Z"
+    },
+    {
+      "id": "fat_4",
+      "cliente_id": "cli_2",
+      "numero_fattura": "0004/2026",
+      "descrizione": "Rinnovo abbonamento mensile",
+      "importo": 80,
+      "data_emissione": "2026-05-15",
+      "data_scadenza": "2026-05-30",
+      "stato_pagamento": "scaduto",
+      "file_url": "",
+      "creato_il": "2026-05-15T12:05:00Z"
+    }
+  ],
+  "staff": [
+    {
+      "id": "st_1",
+      "email": "amministrazione.vyroglobal@gmail.com",
+      "nome": "Admin Vyro",
+      "ruolo": "admin"
+    },
+    {
+      "id": "st_2",
+      "email": "collega.yoga@gmail.com",
+      "nome": "Francesca Staff",
+      "ruolo": "staff"
+    }
+  ],
+  "promemoria": [
+    {
+      "id": "prom_1",
+      "testo": "Riepilogo giornaliero: Oggi hai 1 abbonamento in scadenza (Sandra Neri, il 22/06), 1 fattura scaduta non pagata (Mario Rossi, €80.00) e 1 cliente inattiva da contattare (Sofia Moretti, assente da 37 giorni). Pianifica un contatto per stimolare il rientro.",
+      "data_creazione": "2026-06-18"
+    }
+  ],
+  "impostazioni": {
+    "nome": "Flux Yoga & Pilates Studio",
+    "indirizzo": "Via della Moscova 24, 20121 Milano (MI)",
+    "piva": "IT09876543210",
+    "logo": "FluxGestionale",
+    "abbonamenti_predefiniti": [
+      {
+        "tipo": "Mensile",
+        "prezzo": 80,
+        "durata_mesi": 1
+      },
+      {
+        "tipo": "Trimestrale",
+        "prezzo": 220,
+        "durata_mesi": 3
+      },
+      {
+        "tipo": "Annuale",
+        "prezzo": 750,
+        "durata_mesi": 12
+      }
+    ]
+  }
+}
